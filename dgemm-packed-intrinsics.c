@@ -6,7 +6,7 @@
 const char* dgemm_desc = "Blocked dgemm with matrix packing and intrinsics.";
 
 #if !defined(BLOCK_SIZE)
-#define BLOCK_SIZE 64
+#define BLOCK_SIZE 44
 #endif
 
 #if !defined(min)
@@ -128,13 +128,23 @@ void unpack(int lda, double *X, double *Y)
  * On exit, A and B maintain their input values. */  
 void square_dgemm (int lda, double* A, double* B, double* C)
 {
-    double *Y, *X;
+    double *Y, *X, *oldC;
+    int oldlda = lda;
     int blocks = (lda + BLOCK_SIZE - 1) / BLOCK_SIZE;
     int block_square = BLOCK_SIZE * BLOCK_SIZE;
-    Y = (double*)malloc(sizeof(double) * blocks * blocks * BLOCK_SIZE * BLOCK_SIZE);
-    X = (double*)malloc(sizeof(double) * blocks * blocks * BLOCK_SIZE * BLOCK_SIZE);
-    pack(lda, A, X);
-    pack(lda, B, Y);
+    Y = (double*)_mm_malloc(sizeof(double) * blocks * blocks * BLOCK_SIZE * BLOCK_SIZE,128);
+    X = (double*)_mm_malloc(sizeof(double) * blocks * blocks * BLOCK_SIZE * BLOCK_SIZE,128);
+    if (lda % 2 != 0)
+    {
+      oldC = C;
+      C = (double*) _mm_malloc(sizeof(double)*(lda+1)*(lda+1),128);
+      lda = lda + 1;
+      for (int i = 0; i < oldlda; ++i)
+	for (int j = 0; j < oldlda; ++j)
+	  C[j+i*lda] = oldC[j+i*oldlda];
+    }
+    pack(oldlda, A, X);
+    pack(oldlda, B, Y);
 
   /* For each block-row of A */ 
   for (int i = 0; i < blocks; i += 1)
@@ -144,16 +154,24 @@ void square_dgemm (int lda, double* A, double* B, double* C)
       for (int k = 0; k < blocks; k += 1)
       {
 	/* Correct block dimensions if block "goes off edge of" the matrix */
-	int M = min (BLOCK_SIZE, lda-i*BLOCK_SIZE);
-	int N = min (BLOCK_SIZE, lda-j*BLOCK_SIZE);
-	int K = min (BLOCK_SIZE, lda-k*BLOCK_SIZE);
+	int M = min (BLOCK_SIZE, oldlda-i*BLOCK_SIZE);
+	int N = min (BLOCK_SIZE, oldlda-j*BLOCK_SIZE);
+	int K = min (BLOCK_SIZE, oldlda-k*BLOCK_SIZE);
 
 	/* Perform individual block dgemm */
 	do_block(lda, M, N, K, X + (i + k * blocks) * block_square,
 	  Y + (k + j * blocks) * block_square, C + (i + j*lda) * BLOCK_SIZE);
       }
 
-
-  free(X);
-  free(Y);
+  if (lda != oldlda)
+  {
+    for (int i = 0; i < oldlda; ++i)
+      for (int j = 0; j < oldlda; ++j)
+        oldC[j+i*oldlda] = C[j+i*lda];
+    oldC = C;
+    _mm_free(oldC);
+  }
+  _mm_free(X);
+  _mm_free(Y);
+  
 }
