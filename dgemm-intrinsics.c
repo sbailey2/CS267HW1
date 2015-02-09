@@ -1,116 +1,46 @@
-//#include <emmintrin.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <emmintrin.h>
+#include <pmmintrin.h>
 
-const char* dgemm_desc = "Blocked dgemm with matrix reordering.";
+const char* dgemm_desc = "Simple blocked dgemm, with SSE intrinsics.";
 
 #if !defined(BLOCK_SIZE)
-#define BLOCK_SIZE 200
+#define BLOCK_SIZE 32
 #endif
 
-#if !defined(min)
 #define min(a,b) (((a)<(b))?(a):(b))
-#endif
 
-/* This auxiliary subroutine performs a smaller dgemm operation on a packed matrix
+/* This auxiliary subroutine performs a smaller dgemm operation
  *  C := C + A * B
  * where C is M-by-N, A is M-by-K, and B is K-by-N. */
-static void do_packed_block (int lda, int M, int N, int K, double* A, double* B, double* C)
+static void do_block (int lda, int M, int N, int K, double* A, double* B, double* C)
 {
+  __m128d cij, bcol, arow, c1, arow2, c2; 
   /* For each row i of A */
-  for (int i = 0; i < M; ++i)
+ for (int j = 0; j < N; ++j)
+  {
     /* For each column j of B */ 
-    for (int j = 0; j < N; ++j) 
+    for (int i = 0; i < M; i+=2) 
     {
       /* Compute C(i,j) */
-      double cij = C[i+j*lda];
-      for (int k = 0; k < K-2; k+=2) {
-	  cij += A[i+k*BLOCK_SIZE] * B[k+j*BLOCK_SIZE];
-	  //_m128d a = _mm_load_pd(A+i+k*BLOCK_SIZE);
-	  //_m128d b = _mm_load_pd(B+i+k*BLOCK_SIZE);
-	  //_m128d c = _mm_add_pd(
-      }
-      C[i+j*lda] = cij;
-    }
-}
+      cij = _mm_load_pd(C+i+j*lda);
+      for (int k = 0; k < K; k+=2)
+      {
+	bcol = _mm_load_pd(B+k+j*lda);
+	arow = _mm_loadl_pd(arow,A+i+k*lda);
+	arow = _mm_loadh_pd(arow,A+i+(k+1)*lda);
+	c1 = _mm_mul_pd(arow,bcol);
 
-/*static void do_simd_block (int lda, int M, int N, int K, double* A, double* B, double* C)
-{
-  /* For each row i of A
-  for (int i = 0; i < M - 1; i += 2)
-    /* For each column j of B
-    for (int j = 0; j < N - 1; j += 2) 
-    {
-      /* Compute C(i,j)
-      //double cij = C[i+j*lda];
-	_m128d c1 = _mm_load_pd(C + i + j * lda);
-	_m128d c2 = _mm_load_pd(C + i + (j + 1) * lda);
-      for (int k = 0; k < K-2; k+=2) {
-	  //_m128d a = _mm_load_pd(A+i+k*BLOCK_SIZE);
-	  //_m128d b = _mm_load_pd(B+i+k*BLOCK_SIZE);
-	  //_m128d c = _mm_add_pd(
-      }
-      _mm_store_pd(C + i + j * lda, c1);
-      _mm_store_pd(C + i + (j + 1) * lda, c2);
-    }
-}*/
+	arow2 = _mm_loadl_pd(arow2,A+i+1+k*lda);
+	arow2 = _mm_loadh_pd(arow2,A+i+1+(k+1)*lda);
+	c2 = _mm_mul_pd(arow2,bcol);
 
-/* This auxiliary routine copies the block i,j from matrix X and stores
-   it in a continuous piece of memory in Y */
-void pack_block(int lda, int i, int j, double *X, double *Y)
-{
-    int M = min (BLOCK_SIZE, lda-i*BLOCK_SIZE);
-    int N = min (BLOCK_SIZE, lda-j*BLOCK_SIZE);
-    int blocks = (lda + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    int block_square = BLOCK_SIZE * BLOCK_SIZE;
-    for (int y = 0; y < M; ++y) {
-	for (int x = 0; x < N; ++x) {
-	    int yi = (j + i * blocks) * block_square + x + y * BLOCK_SIZE;
-	    int xi = (j + i * lda) * BLOCK_SIZE + x + y * lda;
-	    Y[yi] = X[xi];
-	}
-    }
-}
-
-/* This auxiliary routine copies the block i,j from the reorganized matrix Y
-   and stores it in a row-major format in X */
-void unpack_block(int lda, int i, int j, double *X, double *Y)
-{
-    int M = min (BLOCK_SIZE, lda-i*BLOCK_SIZE);
-    int N = min (BLOCK_SIZE, lda-j*BLOCK_SIZE);
-    int blocks = (lda + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    int block_square = BLOCK_SIZE * BLOCK_SIZE;
-    for (int y = 0; y < M; ++y) {
-	for (int x = 0; x < N; ++x) {
-	    int yi = (j + i * blocks) * block_square + x + y * BLOCK_SIZE;
-	    int xi = (j + i * lda) * BLOCK_SIZE + x + y * lda;
-	    X[xi] = Y[yi];
-	}
-    }
-}
-
-/* This routine reorganizes the data so that each block is in
- * one contiguous piece of memory */
-void pack(int lda, double *X, double *Y)
-{
-    int blocks = (lda + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    for (int i = 0; i < blocks; ++i) {
-	for (int j = 0; j < blocks; ++j) {
-	    pack_block(lda, i, j, X, Y);
-	}
-    }
-}
-
-/* This routine unpackes the data from
- * one contiguous piece of memory in Y */
-void unpack(int lda, double *X, double *Y)
-{
-    int blocks = (lda + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    for (int i = 0; i < blocks; ++i) {
-	for (int j = 0; j < blocks; ++j) {
-	    unpack_block(lda, i, j, X, Y);
-	}
-    }
+        cij = _mm_add_pd(_mm_hadd_pd(c1,c2),cij);
+     }
+     _mm_store_pd(C+i+j*lda,cij);
+   }
+  }
 }
 
 /* This routine performs a dgemm operation
@@ -119,32 +49,62 @@ void unpack(int lda, double *X, double *Y)
  * On exit, A and B maintain their input values. */  
 void square_dgemm (int lda, double* A, double* B, double* C)
 {
-    double *Y, *X;
-    int blocks = (lda + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    int block_square = BLOCK_SIZE * BLOCK_SIZE;
-    Y = (double*)malloc(sizeof(double) * blocks * blocks * BLOCK_SIZE * BLOCK_SIZE);
-    X = (double*)malloc(sizeof(double) * blocks * blocks * BLOCK_SIZE * BLOCK_SIZE);
-    pack(lda, A, X);
-    pack(lda, B, Y);
+  // pad matrices if dimensions are odd, to avoid alignment issues later
+  double *newA, *newB, *newC;
+  int md;
+  newA = (double*)calloc((lda+1)*(lda+1),sizeof(double));
+  newB = (double*)calloc((lda+1)*(lda+1),sizeof(double));
+  newC = (double*)calloc((lda+1)*(lda+1),sizeof(double));
+
+  if (lda % 2 != 0)
+  {
+    for (int r = 0; r < lda; ++r)
+    {
+      memcpy(newA+r*(lda+1),A+r*lda,lda*sizeof(double));
+      memcpy(newB+r*(lda+1),B+r*lda,lda*sizeof(double));
+      memcpy(newC+r*(lda+1),C+r*lda,lda*sizeof(double));
+    }
+    md = lda + 1;
+  } else {
+    memcpy(newA,A,lda*lda*sizeof(double));
+    memcpy(newB,B,lda*lda*sizeof(double));
+    memcpy(newC,C,lda*lda*sizeof(double));
+    md = lda;
+  }
+    
 
   /* For each block-row of A */ 
-  for (int i = 0; i < blocks; i += 1)
+  for (int i = 0; i < md; i += BLOCK_SIZE)
     /* For each block-column of B */
-    for (int j = 0; j < blocks; j += 1)
+    for (int j = 0; j < md; j += BLOCK_SIZE)
       /* Accumulate block dgemms into block of C */
-      for (int k = 0; k < blocks; k += 1)
+      for (int k = 0; k < md; k += BLOCK_SIZE)
       {
 	/* Correct block dimensions if block "goes off edge of" the matrix */
-	int M = min (BLOCK_SIZE, lda-i*BLOCK_SIZE);
-	int N = min (BLOCK_SIZE, lda-j*BLOCK_SIZE);
-	int K = min (BLOCK_SIZE, lda-k*BLOCK_SIZE);
+	int M = min (BLOCK_SIZE, md-i);
+	int N = min (BLOCK_SIZE, md-j);
+	int K = min (BLOCK_SIZE, md-k);
 
 	/* Perform individual block dgemm */
-	do_packed_block(lda, M, N, K, X + (i + k * blocks) * block_square,
-	  Y + (k + j * blocks) * block_square, C + (i + j*lda) * BLOCK_SIZE);
+	do_block(md, M, N, K, newA + i + k*md, newB + k + j*md, newC + i + j*md);
       }
 
+  // remove padding
+  if (lda % 2 != 0)
+  {
+    for (int r = 0; r < lda; ++r)
+    {
+      memcpy(A+r*lda,newA+r*(lda+1),lda*sizeof(double));
+      memcpy(B+r*lda,newB+r*(lda+1),lda*sizeof(double));
+      memcpy(C+r*lda,newC+r*(lda+1),lda*sizeof(double));
+    }
+  } else {
+    memcpy(A,newA,lda*lda*sizeof(double));
+    memcpy(B,newB,lda*lda*sizeof(double));
+    memcpy(C,newC,lda*lda*sizeof(double));
+  }
 
-  free(X);
-  free(Y);
+  free(newA);
+  free(newB);
+  free(newC);
 }
