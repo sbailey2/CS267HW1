@@ -1,0 +1,14 @@
+#PBS -V
+#PBS -l mppwidth=1
+#PBS -l mppnppn=1
+#PBS -j eo
+#PBS -A mp309
+
+cd $PBS_O_WORKDIR
+aprun -n 1 -N 1 ./benchmark-naive
+aprun -n 1 -N 1 ./benchmark-blocked
+aprun -n 1 -N 1 ./benchmark-blas
+aprun -n 1 -N 1 ./benchmark-packed
+aprun -n 1 -N 1 ./benchmark-packed-intrinsics
+aprun -n 1 -N 1 ./benchmark-packed2
+aprun -n 1 -N 1 ./benchmark-mlblocked

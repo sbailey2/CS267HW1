@@ -2,14 +2,15 @@
 # This makefile is intended for the GNU C compiler. On Hopper, the Portland compilers are default, so you must instruct the Cray compiler wrappers to switch to GNU: type "module swap PrgEnv-pgi PrgEnv-gnu"
 
 CC = cc 
+#OPT = -g
 OPT = -O3 -march=native
 CFLAGS = -Wall -std=gnu99 $(OPT)
 LDFLAGS = -Wall
 # librt is needed for clock_gettime
 LDLIBS = -lrt 
 
-targets = benchmark-naive benchmark-blocked benchmark-blas benchmark-packed benchmark-packed-intrinsics
-objects = benchmark.o dgemm-naive.o dgemm-blocked.o dgemm-blas.o dgemm-packed.o dgemm-packed-intrinsics.o
+targets = benchmark-naive benchmark-blocked benchmark-blas benchmark-packed benchmark-packed-intrinsics benchmark-packed2 benchmark-mlblocked
+objects = benchmark.o dgemm-naive.o dgemm-blocked.o dgemm-blas.o dgemm-packed.o dgemm-packed-intrinsics.o dgemm-packed2.o dgemm-mlblocked.o
 
 .PHONY : default
 default : all
@@ -26,6 +27,10 @@ benchmark-packed-intrinsics : benchmark.o dgemm-packed-intrinsics.o
 benchmark-packed : benchmark.o dgemm-packed.o
 	$(CC) -o $@ $^ $(LDLIBS)
 benchmark-blas : benchmark.o dgemm-blas.o
+	$(CC) -o $@ $^ $(LDLIBS)
+benchmark-packed2 : benchmark.o dgemm-packed2.o
+	$(CC) -o $@ $^ $(LDLIBS)
+benchmark-mlblocked : benchmark.o dgemm-mlblocked.o
 	$(CC) -o $@ $^ $(LDLIBS)
 
 %.o : %.c
