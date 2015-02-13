@@ -14,8 +14,8 @@ LDLIBS = -lrt
 
 #targets = benchmark-naive benchmark-blocked benchmark-blas benchmark-packed benchmark-packed-intrinsics benchmark-packed2 benchmark-mlblocked
 #objects = benchmark.o dgemm-naive.o dgemm-blocked.o dgemm-blas.o dgemm-packed.o dgemm-packed-intrinsics.o dgemm-packed2.o dgemm-mlblocked.o
-targets = benchmark-intrinsics3
-objects = benchmark.o dgemm-intrinsics3.o
+targets = benchmark-intrinsics4
+objects = benchmark.o dgemm-intrinsics4.o
 
 .PHONY : default
 default : all
@@ -39,7 +39,7 @@ all : clean $(targets)
 #	$(CC) -o $@ $^ $(LDLIBS)
 #benchmark-intrinsics2 : benchmark.o dgemm-intrinsics2.o
 #	$(CC) -o $@ $^ $(LDLIBS)
-benchmark-intrinsics3 : benchmark.o dgemm-intrinsics3.o
+benchmark-intrinsics4 : benchmark.o dgemm-intrinsics4.o
 	$(CC) -o $@ $^ $(LDLIBS)
 
 %.o : %.c
