@@ -7,7 +7,7 @@
 const char* dgemm_desc = "Blocked dgemm with intrinsics, register blocking, outer product version";
 
 #if !defined(BLOCK_SIZE)
-#define BLOCK_SIZE 60
+#define BLOCK_SIZE 4
 #endif
 
 #if !defined(min)
@@ -50,11 +50,11 @@ static void do_block (int M, int N, int K, double* A, double* B, double* C)
  	c3 = _mm_add_pd(_mm_mul_pd(a1,b),c3);
 	c4 = _mm_add_pd(_mm_mul_pd(a2,b),c4);
 
-        b = _mm_load1_pd(B+j+1+k*N);
+        b = _mm_load1_pd(B+j+2+k*N);
  	c5 = _mm_add_pd(_mm_mul_pd(a1,b),c5);
 	c6 = _mm_add_pd(_mm_mul_pd(a2,b),c6);
 
-        b = _mm_load1_pd(B+j+1+k*N);
+        b = _mm_load1_pd(B+j+3+k*N);
  	c7 = _mm_add_pd(_mm_mul_pd(a1,b),c7);
 	c8 = _mm_add_pd(_mm_mul_pd(a2,b),c8);
      }
@@ -68,6 +68,7 @@ static void do_block (int M, int N, int K, double* A, double* B, double* C)
       _mm_store_pd(C+i+2+(j+3)*M,c8);
     }
   }
+
 }
 
 /* If lda is not even, pad matrix with extra row and extra column. Then
@@ -168,8 +169,8 @@ void square_dgemm (int lda, double* A, double* B, double* C)
 	int K = min (BLOCK_SIZE, newlda-k);
 
 	/* Perform individual block dgemm */
-	do_block(M, N, K, newA + i*newlda + k*M, 
-          newB + j*newlda + k*N, newC + j*newlda + i*N);
+	do_block(M, N, K, newA + k*newlda + i*M, 
+          newB + k*newlda + j*N, newC + j*newlda + i*N);
       }
 
   unpad_and_unpack_col(lda,newC,C);
